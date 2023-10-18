@@ -197,8 +197,9 @@ func (p *Nft1155OwnershipBlockProcessor) upsertOwnership(tokenOwner TokenOwner, 
 
 func (p *Nft1155OwnershipBlockProcessor) DebugPrintResults() {
 	p.mutex.RLock()
-	for tokenOwner, numTokens := range p.tokenOwners {
-		log.Printf("TokenOwner: %s, %s, %s, %s", tokenOwner.owner, tokenOwner.contractAddress, tokenOwner.tokenID, numTokens)
-	}
+	// for tokenOwner, numTokens := range p.tokenOwners {
+	// 	log.Printf("TokenOwner: %s, %s, %s, %s", tokenOwner.owner, tokenOwner.contractAddress, tokenOwner.tokenID, numTokens)
+	// }
+	log.Printf("Number of token owners: %d", len(p.tokenOwners))
 	p.mutex.RUnlock()
 }
