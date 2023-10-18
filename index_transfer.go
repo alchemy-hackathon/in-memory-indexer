@@ -143,13 +143,13 @@ func main() {
 
 		wg.Add(1)
 		go func(n int) {
-			log.Printf("Processing blocks in file %s.", fileName)
+			log.Printf("[%d / %d] Processing blocks in file %s.", n+1, len(files), fileName)
 			numBlocks, err := processBlocks(&wg, blocksPath+fileName, &processor)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			log.Printf("Finished processing %d blocks in file %s.", numBlocks, fileName)
+			log.Printf("[%d / %d] Finished processing %d blocks in file %s.", n+1, len(files), numBlocks, fileName)
 			<-guard
 		}(i)
 	}
