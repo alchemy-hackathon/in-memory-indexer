@@ -24,7 +24,7 @@ const TransferBatchTopic0 = "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d9
 
 type BlockProcessor interface {
 	ProcessBlock(block *Block) error
-	FlushOwnershipToDb() error
+	FlushToDb() error
 	DebugPrintResults()
 }
 
@@ -204,7 +204,7 @@ func (p *Nft1155OwnershipBlockProcessor) upsertOwnership(tokenOwner TokenOwner, 
 }
 
 // Yeah these queries are prone to SQL injection but it's easier to write.
-func (p *Nft1155OwnershipBlockProcessor) FlushOwnershipToDb() error {
+func (p *Nft1155OwnershipBlockProcessor) FlushToDb() error {
 	rows := [][]any{}
 	columns := []string{"owner_address", "contract_address", "token_id", "count"}
 	tableName := "token_owner"

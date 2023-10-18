@@ -91,7 +91,7 @@ func processBlocks(wg *sync.WaitGroup, fileName string, processor BlockProcessor
 	log.Printf("Finished indexing blocks in file %s. Now flushing to DB.", fileName)
 
 	err = Retry(func() error {
-		err = processor.FlushOwnershipToDb()
+		err = processor.FlushToDb()
 		if err != nil {
 			return err
 		}
