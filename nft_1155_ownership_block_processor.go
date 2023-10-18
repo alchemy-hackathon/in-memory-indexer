@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"math/big"
 	"strings"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 const Erc1155TransferAbi = `[{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"operator","type":"address"},{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256[]","name":"ids","type":"uint256[]"},{"indexed":false,"internalType":"uint256[]","name":"values","type":"uint256[]"}],"name":"TransferBatch","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"operator","type":"address"},{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"TransferSingle","type":"event"}]`
@@ -19,6 +24,7 @@ const TransferBatchTopic0 = "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d9
 
 type BlockProcessor interface {
 	ProcessBlock(block *Block) error
+	FlushOwnershipToDb() error
 	DebugPrintResults()
 }
 
@@ -32,6 +38,19 @@ type Nft1155OwnershipBlockProcessor struct {
 	// Map of TokenOwner -> number of tokens owned.
 	tokenOwners map[TokenOwner]*big.Int
 	mutex       sync.RWMutex
+	db          *pgxpool.Pool
+}
+
+func NewNft1155OwnershipBlockProcessor(dbConnStr string) (*Nft1155OwnershipBlockProcessor, error) {
+	db, err := pgxpool.Connect(context.Background(), dbConnStr)
+
+	if err != nil {
+		return nil, err
+	}
+	return &Nft1155OwnershipBlockProcessor{
+		tokenOwners: make(map[TokenOwner]*big.Int),
+		db:          db,
+	}, nil
 }
 
 func (p *Nft1155OwnershipBlockProcessor) ProcessBlock(block *Block) error {
@@ -80,7 +99,6 @@ func (p *Nft1155OwnershipBlockProcessor) ProcessBlock(block *Block) error {
 					return err
 				}
 
-				// log.Printf("TransferBatch event: from=%s, to=%s, ids=%s, values=%s", from, to, ids, values)
 				for i, id := range ids {
 					owner := TokenOwner{
 						owner:           to,
@@ -102,12 +120,6 @@ func (p *Nft1155OwnershipBlockProcessor) ProcessBlock(block *Block) error {
 	}
 
 	return nil
-}
-
-func NewNft1155OwnershipBlockProcessor() Nft1155OwnershipBlockProcessor {
-	return Nft1155OwnershipBlockProcessor{
-		tokenOwners: make(map[TokenOwner]*big.Int),
-	}
 }
 
 func decodeTransferSingleEventData(hexData string) (id *big.Int, value *big.Int, err error) {
@@ -181,25 +193,87 @@ func decodeTransferBatchEventData(hexData string) (ids []*big.Int, values []*big
 // }
 
 func (p *Nft1155OwnershipBlockProcessor) upsertOwnership(tokenOwner TokenOwner, numTokens *big.Int) {
-	p.mutex.RLock()
+	p.mutex.Lock()
 	_, ok := p.tokenOwners[tokenOwner]
-	p.mutex.RUnlock()
 	if ok {
-		p.mutex.Lock()
 		p.tokenOwners[tokenOwner].Add(p.tokenOwners[tokenOwner], numTokens)
-		p.mutex.Unlock()
 	} else {
-		p.mutex.Lock()
 		p.tokenOwners[tokenOwner] = numTokens
-		p.mutex.Unlock()
 	}
+	p.mutex.Unlock()
+}
+
+// Yeah these queries are prone to SQL injection but it's easier to write.
+func (p *Nft1155OwnershipBlockProcessor) FlushOwnershipToDb() error {
+	rows := [][]any{}
+	columns := []string{"owner_address", "contract_address", "token_id", "count"}
+	tableName := "token_owner"
+	tempTableName := tableName + "_temp"
+
+	p.mutex.Lock()
+	for tokenOwner, numTokens := range p.tokenOwners {
+		log.Printf("tokenOwner: %s, contractAddress: %s, tokenID: %s, numTokens: %s", tokenOwner.owner, tokenOwner.contractAddress, tokenOwner.tokenID, numTokens)
+		numTokensNumeric := new(pgtype.Numeric)
+		err := numTokensNumeric.Set(numTokens.String())
+		if err != nil {
+			return fmt.Errorf("Error creating numTokensNumeric: %w", err)
+		}
+		rows = append(rows, []any{tokenOwner.owner, tokenOwner.contractAddress, tokenOwner.tokenID, numTokensNumeric})
+	}
+	p.tokenOwners = make(map[TokenOwner]*big.Int)
+	p.mutex.Unlock()
+
+	transaction, err := p.db.Begin(context.Background())
+	if err != nil {
+		return fmt.Errorf("Error beginning transaction: %w", err)
+	}
+
+	defer transaction.Rollback(context.Background())
+
+	_, err = transaction.Exec(context.Background(), fmt.Sprintf(`
+		CREATE TEMPORARY TABLE %s (LIKE %s INCLUDING ALL) ON COMMIT DROP
+	`, tempTableName, tableName))
+	if err != nil {
+		return fmt.Errorf("Error creating temporary table: %w", err)
+	}
+
+	_, err = transaction.CopyFrom(
+		context.Background(),
+		pgx.Identifier{tempTableName},
+		columns,
+		pgx.CopyFromRows(rows),
+	)
+	if err != nil {
+		return fmt.Errorf("Error copying rows: %w", err)
+	}
+
+	_, err = transaction.Exec(context.Background(), fmt.Sprintf(`
+		INSERT INTO %s (owner_address, contract_address, token_id, count)
+		(
+			SELECT owner_address, contract_address, token_id, count
+			FROM %s
+		)
+		ON CONFLICT (owner_address, contract_address, token_id)
+		DO UPDATE SET count = %s.count + EXCLUDED.count;	
+	`, tableName, tempTableName, tableName))
+	if err != nil {
+		return fmt.Errorf("Error upserting rows: %w", err)
+	}
+
+	transaction.Commit(context.Background())
+	// We should never use this connection pool again after this function is called.
+	p.db.Close()
+	return nil
+}
+
+func (p *Nft1155OwnershipBlockProcessor) GetOwnerCount() int {
+	return len(p.tokenOwners)
 }
 
 func (p *Nft1155OwnershipBlockProcessor) DebugPrintResults() {
 	p.mutex.RLock()
-	// for tokenOwner, numTokens := range p.tokenOwners {
-	// 	log.Printf("TokenOwner: %s, %s, %s, %s", tokenOwner.owner, tokenOwner.contractAddress, tokenOwner.tokenID, numTokens)
-	// }
-	log.Printf("Number of token owners: %d", len(p.tokenOwners))
+	for tokenOwner, numTokens := range p.tokenOwners {
+		log.Printf("TokenOwner: %s, %s, %s, %s", tokenOwner.owner, tokenOwner.contractAddress, tokenOwner.tokenID, numTokens)
+	}
 	p.mutex.RUnlock()
 }

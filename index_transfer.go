@@ -84,6 +84,12 @@ func processBlocks(wg *sync.WaitGroup, fileName string, processor BlockProcessor
 		}
 		numBlocks += 1
 	}
+	log.Printf("Finished indexing blocks in file %s. Now flushing to DB.", fileName)
+
+	err = processor.FlushOwnershipToDb()
+	if err != nil {
+		return 0, err
+	}
 
 	return numBlocks, err
 }
@@ -123,7 +129,13 @@ func deserializeTransactions(transactions interface{}) []Transaction {
 }
 
 func main() {
-	processor := NewNft1155OwnershipBlockProcessor()
+	dbConnStr := os.Getenv(("DB_CONN_STR"))
+	if dbConnStr == "" {
+		log.Fatal("DB_CONN_STR environment variable not set.")
+	}
+	if os.Args[1] == "" {
+		log.Fatal("Max concurrency not set. Please provide as first argument.")
+	}
 
 	blocksPath := "./blocks/"
 	// Get all files in currently directory
@@ -149,13 +161,18 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			log.Printf("[%d / %d] Processing blocks in file %s.", n+1, len(files), fileName)
-			numBlocks, err := processBlocks(&wg, blocksPath+fileName, &processor)
+
+			processor, err := NewNft1155OwnershipBlockProcessor(dbConnStr)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			numBlocks, err := processBlocks(&wg, blocksPath+fileName, processor)
 			if err != nil {
 				log.Fatal(err)
 			}
 
 			log.Printf("[%d / %d] Finished processing %d blocks in file %s.", n+1, len(files), numBlocks, fileName)
-			processor.DebugPrintResults()
 
 			<-guard
 		}(i)
