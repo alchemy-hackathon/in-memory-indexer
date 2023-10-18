@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	_ "github.com/marcboeker/go-duckdb"
 )
@@ -162,6 +163,8 @@ func main() {
 		go func(n int) {
 			log.Printf("[%d / %d] Processing blocks in file %s.", n+1, len(files), fileName)
 
+			start := time.Now()
+
 			processor, err := NewNft1155OwnershipBlockProcessor(dbConnStr)
 			if err != nil {
 				log.Fatal(err)
@@ -172,7 +175,7 @@ func main() {
 				log.Fatal(err)
 			}
 
-			log.Printf("[%d / %d] Finished processing %d blocks in file %s.", n+1, len(files), numBlocks, fileName)
+			log.Printf("[%d / %d] Finished processing %d blocks in file %s. Took %v.", n+1, len(files), numBlocks, fileName, time.Since(start))
 
 			<-guard
 		}(i)
