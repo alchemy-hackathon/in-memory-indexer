@@ -133,7 +133,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	maxConcurrency := 10
+	maxConcurrency := 20
 	guard := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
 
