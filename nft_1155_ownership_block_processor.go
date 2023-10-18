@@ -19,9 +19,6 @@ const Erc1155TransferAbi = `[{"anonymous":false,"inputs":[{"indexed":true,"inter
 const TransferSingleTopic0 = "0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62"
 const TransferBatchTopic0 = "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb"
 
-// const Erc20TransferAbi = `[{"anonymous":false,"inputs":[{"indexed":true,"name":"from","type":"address"},{"indexed":true,"name":"to","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Transfer","type":"event"}]`
-// const TransferTopic0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-
 type BlockProcessor interface {
 	ProcessBlock(block *Block) error
 	FlushToDb() error
@@ -54,7 +51,6 @@ func NewNft1155OwnershipBlockProcessor(dbConnStr string) (*Nft1155OwnershipBlock
 }
 
 func (p *Nft1155OwnershipBlockProcessor) ProcessBlock(block *Block) error {
-	// iterate through logs in transactions in the block and skip logs that don't have topic0 == TransferSingle
 	for _, transaction := range block.transactions {
 		for _, eventLog := range transaction.logs {
 			// Logs without topics are definitely not transfer events.
@@ -63,13 +59,6 @@ func (p *Nft1155OwnershipBlockProcessor) ProcessBlock(block *Block) error {
 			}
 
 			switch eventLog.topics[0] {
-			// case TransferTopic0:
-			// 	value, err := decodeTransferEventData(eventLog.data)
-			// 	if err != nil {
-			// 		log.Printf("transaction hash=%s, logIndex=%s, logData=%s, topic0=%s, topic1=%s, topic2=%s", transaction.hash, eventLog.logIndex, eventLog.data, eventLog.topics[0], eventLog.topics[1], eventLog.topics[2])
-			// 		return err
-			// 	}
-			// 	log.Printf("Transfer event: value=%d, transactionHash=%s, logIndex=%s", value, transaction.hash, eventLog.logIndex)
 			case TransferSingleTopic0:
 				from := eventLog.topics[1]
 				to := eventLog.topics[2]
@@ -163,34 +152,6 @@ func decodeTransferBatchEventData(hexData string) (ids []*big.Int, values []*big
 
 	return event["ids"].([]*big.Int), event["values"].([]*big.Int), nil
 }
-
-// func decodeTransferEventData(hexData string) (value *big.Int, err error) {
-// 	data, err := hex.DecodeString(hexData[2:])
-// 	// Needs special handling of data = 0 because the ABI decoder can't handle it.
-// 	if hexData[2:] == "" {
-// 		return big.NewInt(0), nil
-// 	}
-
-// 	if err != nil {
-// 		log.Printf("Error decoding hex data. hexData=%s, lobbed=%s", hexData, hexData[2:])
-// 		return nil, err
-// 	}
-
-// 	abi, err := abi.JSON(strings.NewReader(Erc20TransferAbi))
-// 	if err != nil {
-// 		log.Printf("Error parsing abi. %s", err)
-// 		return nil, err
-// 	}
-
-// 	event := map[string]interface{}{}
-// 	if err := abi.UnpackIntoMap(event, "Transfer", data); err != nil {
-// 		log.Printf("Error unpacking data into map. data=%s, hexData=%s, err=%s", data, hexData, err)
-// 		return nil, err
-// 	}
-
-// 	valueInt := event["value"].(*big.Int)
-// 	return valueInt, nil
-// }
 
 func (p *Nft1155OwnershipBlockProcessor) upsertOwnership(tokenOwner TokenOwner, numTokens *big.Int) {
 	p.mutex.Lock()
