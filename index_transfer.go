@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"sync"
 
 	_ "github.com/marcboeker/go-duckdb"
@@ -122,8 +123,6 @@ func deserializeTransactions(transactions interface{}) []Transaction {
 }
 
 func main() {
-	log.Println("Starting...")
-
 	processor := NewNft1155OwnershipBlockProcessor()
 
 	blocksPath := "./blocks/"
@@ -133,7 +132,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	maxConcurrency := 10
+	maxConcurrency, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("Starting to process with file concurrency %d.", maxConcurrency)
+
 	guard := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
 
