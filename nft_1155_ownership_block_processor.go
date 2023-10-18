@@ -212,7 +212,6 @@ func (p *Nft1155OwnershipBlockProcessor) FlushOwnershipToDb() error {
 
 	p.mutex.Lock()
 	for tokenOwner, numTokens := range p.tokenOwners {
-		log.Printf("tokenOwner: %s, contractAddress: %s, tokenID: %s, numTokens: %s", tokenOwner.owner, tokenOwner.contractAddress, tokenOwner.tokenID, numTokens)
 		numTokensNumeric := new(pgtype.Numeric)
 		err := numTokensNumeric.Set(numTokens.String())
 		if err != nil {
