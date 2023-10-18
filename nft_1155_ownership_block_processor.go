@@ -259,9 +259,10 @@ func (p *Nft1155OwnershipBlockProcessor) FlushOwnershipToDb() error {
 		return fmt.Errorf("Error upserting rows: %w", err)
 	}
 
-	transaction.Commit(context.Background())
 	// We should never use this connection pool again after this function is called.
+	transaction.Commit(context.Background())
 	p.db.Close()
+
 	return nil
 }
 
