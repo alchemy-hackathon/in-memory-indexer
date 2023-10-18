@@ -155,6 +155,8 @@ func main() {
 			}
 
 			log.Printf("[%d / %d] Finished processing %d blocks in file %s.", n+1, len(files), numBlocks, fileName)
+			processor.DebugPrintResults()
+
 			<-guard
 		}(i)
 	}
