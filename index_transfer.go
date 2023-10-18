@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"sync"
@@ -141,6 +143,10 @@ func main() {
 	if os.Args[1] == "" {
 		log.Fatal("Max concurrency not set. Please provide as first argument.")
 	}
+
+	go func() {
+		http.ListenAndServe("localhost:8080", nil)
+	}()
 
 	start := time.Now()
 
