@@ -90,7 +90,7 @@ func (p *Nft1155OwnershipBlockProcessor) ProcessBlock(block *Block) error {
 					contractAddress: eventLog.address,
 					tokenID:         id.String(),
 				}
-				p.upsertOwnership(formerOwner, value.Neg(value))
+				p.upsertOwnership(formerOwner, new(big.Int).Set(value).Neg(value))
 			case TransferBatchTopic0:
 				from := eventLog.topics[1]
 				to := eventLog.topics[2]
@@ -111,7 +111,7 @@ func (p *Nft1155OwnershipBlockProcessor) ProcessBlock(block *Block) error {
 						contractAddress: eventLog.address,
 						tokenID:         id.String(),
 					}
-					p.upsertOwnership(formerOwner, values[i].Neg(values[i]))
+					p.upsertOwnership(formerOwner, new(big.Int).Set(values[i]).Neg(values[i]))
 				}
 			default:
 				continue
