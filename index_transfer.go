@@ -142,6 +142,8 @@ func main() {
 		log.Fatal("Max concurrency not set. Please provide as first argument.")
 	}
 
+	start := time.Now()
+
 	blocksPath := "./blocks/"
 	// Get all files in currently directory
 	files, err := os.ReadDir(blocksPath)
@@ -167,7 +169,7 @@ func main() {
 		go func(n int) {
 			log.Printf("[%d / %d] Processing blocks in file %s.", n+1, len(files), fileName)
 
-			start := time.Now()
+			chunkProcessingStart := time.Now()
 
 			processor, err := NewNft1155OwnershipBlockProcessor(dbConnStr)
 			if err != nil {
@@ -179,11 +181,13 @@ func main() {
 				log.Fatal(err)
 			}
 
-			log.Printf("[%d / %d] Finished processing %d blocks in file %s. Took %v.", n+1, len(files), numBlocks, fileName, time.Since(start))
+			log.Printf("[%d / %d] Finished processing %d blocks in file %s. Took %v.", n+1, len(files), numBlocks, fileName, time.Since(chunkProcessingStart))
 
 			<-guard
 		}(i)
 	}
+
+	log.Printf("Job finished. Total time: %v.", time.Since(start))
 
 	wg.Wait()
 	// processor.DebugPrintResults()
