@@ -56,6 +56,7 @@ func processBlocks(wg *sync.WaitGroup, fileName string, processor BlockProcessor
 	if err != nil {
 		return 0, err
 	}
+	defer db.Close()
 
 	result, err := db.Query(fmt.Sprintf(`
 		SELECT *
