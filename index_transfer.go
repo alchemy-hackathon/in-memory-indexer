@@ -194,8 +194,7 @@ func main() {
 		}(i)
 	}
 
-	log.Printf("Job finished. Total time: %v.", time.Since(start))
-
 	wg.Wait()
+	log.Printf("Job finished. Total time: %v.", time.Since(start))
 	// processor.DebugPrintResults()
 }
